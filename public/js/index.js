@@ -202,6 +202,7 @@ $(document).ready(function() {
     
         // Incrementar el contador hasta el final para mantener el índice sincronizado
         pagina_orden++;
+        totalComplementos=0;
     });    
     $(document).on("change", ".form-check-input", function () {
         const precio = parseInt($(this).data("price")) || 0;

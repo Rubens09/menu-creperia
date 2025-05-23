@@ -280,8 +280,8 @@ app.post('/api/actualizar-hora-entrega', async (req, res) => {
 
     res.json({
       mensaje: 'Hora de entrega actualizada',
-      fecha_entrega: data.fecha_entrega,
-      codigo_entrega: data.codigo_entrega
+      fecha_entrega: data[0].fecha_entrega,
+      codigo_entrega: data[0].codigo_entrega
     });
   } catch (err) {
     console.error('Error general:', err.message);
