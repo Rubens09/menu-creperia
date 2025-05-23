@@ -13,49 +13,61 @@ $(document).ready(function() {
         );
     }
     $(document).on("click", "#terminar_compra", function () {
-        if ((orden_item.length > 0)|| (($("#slc_item").val()!="..." && $("#slc_item").val()!="") && ($("#slc_subitem").val()!="..." && $("#slc_subitem").val()!=""))) {
+        const itemVal = $("#slc_item").val();
+        const subitemVal = $("#slc_subitem").val();
+        const cantidadVal = $("#num_subitem").val();
+    
+        const itemValido = itemVal && itemVal !== "...";
+        const subitemValido = subitemVal && subitemVal !== "...";
+    
+        // Solo permitir continuar si hay algo previamente en la orden o una nueva selección válida
+        if ((Object.keys(orden_item).length > 0) || (itemValido && subitemValido)) {
             $('#loader').show();
-            let inner = {};
-            articulo+=parseInt($("#num_subitem").val());
-            subtotal+=parseFloat($("#total_compra").text());
-            $("#articulo_compra").text(articulo);
-            $("#subtotal_compra").text(subtotal);
-            $("#total_compra").text("0.00");
-            // Obtener complementos seleccionados
-            $('.complementos').each(function () {
-                let complementoId = $(this).attr('id').split('_')[1];
-                let selected = [];
-                $(this).find('.item-complemento:checked').each(function () {
-                    let labelText = $(this).siblings('label').text().trim();
-                    selected.push(labelText);
+    
+            // Si hay una selección válida, agregarla a la orden
+            if (itemValido && subitemValido) {
+                let inner = {};
+    
+                articulo += parseInt(cantidadVal);
+                subtotal += parseFloat($("#total_compra").text());
+                $("#articulo_compra").text(articulo);
+                $("#subtotal_compra").text(subtotal);
+                $("#total_compra").text("0.00");
+    
+                // Obtener complementos seleccionados
+                $('.complementos').each(function () {
+                    let complementoId = $(this).attr('id').split('_')[1];
+                    let selected = [];
+                    $(this).find('.item-complemento:checked').each(function () {
+                        let labelText = $(this).siblings('label').text().trim();
+                        selected.push(labelText);
+                    });
+                    if (selected.length > 0) {
+                        inner[complementoId] = selected;
+                    }
                 });
-                if (selected.length > 0) {
-                    inner[complementoId] = selected;
-                }
-            });
-        
-            orden_subitem_complemento[pagina_orden] = inner;
-            orden_item[pagina_orden] = $("#slc_item").val();
-            orden_subitem[pagina_orden] = $("#slc_subitem").val();
-            orden_subitem_cantidad[pagina_orden] = $("#num_subitem").val();
-        
+    
+                orden_subitem_complemento[pagina_orden] = inner;
+                orden_item[pagina_orden] = itemVal;
+                orden_subitem[pagina_orden] = subitemVal;
+                orden_subitem_cantidad[pagina_orden] = cantidadVal;
+            }
+    
             let itemsParaStripe = [];
             let ordenesParaGuardar = [];
-        
             const ordenUUID = generateUUID(); // Generador de GUID
-        
+    
             for (let id in orden_item) {
                 const subitems = Array.isArray(orden_subitem[id]) ? orden_subitem[id].join(',') : orden_subitem[id] || '';
                 const cantidad = parseInt(orden_subitem_cantidad[id]) || 1;
                 const complementosRaw = orden_subitem_complemento[id] || {};
-        
-                // ✅ Convertir a array de arrays
+    
                 const complementosSeleccionados = Object.values(complementosRaw);
-        
+    
                 let precioCrepa = calcularPrecioCrepa(orden_item[id], orden_subitem[id]);
                 let precioComplementos = calcularPrecioComplementos(complementosSeleccionados.flat());
                 let precioFinal = precioCrepa + precioComplementos;
-        
+    
                 itemsParaStripe.push({
                     id: ordenUUID,
                     name: `${orden_item[id]} - ${subitems}`,
@@ -65,17 +77,18 @@ $(document).ready(function() {
                         : '',
                     price: precioFinal
                 });
-        
+    
                 ordenesParaGuardar.push({
                     id: ordenUUID,
                     crepa_tipo: orden_item[id],
                     crepa_subtipo: subitems,
-                    complementos: complementosSeleccionados, // 👈 Array de arrays
+                    complementos: complementosSeleccionados,
                     cantidad,
                     precio: precioFinal
                 });
             }
-        
+    
+            // Crear sesión de Stripe
             $.ajax({
                 url: '/create-checkout-session',
                 type: 'POST',
@@ -86,10 +99,12 @@ $(document).ready(function() {
                     if (!sessionId) {
                         throw new Error('Stripe no devolvió un session ID');
                     }
+    
                     const ordenesConId = ordenesParaGuardar.map(item => ({
                         ...item,
                         stripe_session_id: sessionId
                     }));
+    
                     $.ajax({
                         url: '/api/guardar-orden',
                         type: 'POST',
@@ -101,7 +116,7 @@ $(document).ready(function() {
                                 .then(data => {
                                     const stripe = Stripe(data.publicKey);
                                     stripe.redirectToCheckout({ sessionId });
-                                    $('#loader').hide();
+                                    //$('#loader').hide();
                                 });
                         },
                         error: function (xhr) {
@@ -115,8 +130,7 @@ $(document).ready(function() {
                     $('#loader').hide();
                 }
             });
-        }
-        else{
+        } else {
             const Toast = Swal.mixin({
                 toast: true,
                 position: "top-end",
@@ -124,16 +138,16 @@ $(document).ready(function() {
                 timer: 3000,
                 timerProgressBar: true,
                 didOpen: (toast) => {
-                  toast.onmouseenter = Swal.stopTimer;
-                  toast.onmouseleave = Swal.resumeTimer;
+                    toast.onmouseenter = Swal.stopTimer;
+                    toast.onmouseleave = Swal.resumeTimer;
                 }
-              });
-              Toast.fire({
+            });
+            Toast.fire({
                 icon: "warning",
-                title: "Por favor selecciona algun articulo."
-              });
+                title: "Por favor selecciona algún artículo válido."
+            });
         }
-    });                
+    });                    
     $(document).on("click", "#add_item", function () {
         let result = {};
         let inner = {};

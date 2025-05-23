@@ -184,8 +184,8 @@ app.post('/create-checkout-session', async (req, res) => {
     }
 });
 app.post('/api/verificar-pago', async (req, res) => {
-  const cod=generarCodigoEntrega();
-  const { id } = req.body; // Este es el ID de Supabase, no de Stripe
+  const cod = generarCodigoEntrega();
+  const { id } = req.body;
 
   if (!id) {
     return res.status(400).json({ error: 'ID de orden requerido' });
@@ -193,21 +193,32 @@ app.post('/api/verificar-pago', async (req, res) => {
 
   try {
     // Paso 1: Buscar orden por ID en Supabase
-    const { data: orden, error } = await supabase
+    const { data: ordenes, error } = await supabase
       .from('ordenes')
-      .select('stripe_session_id, pagado,fecha_entrega,codigo_entrega')
+      .select('stripe_session_id, pagado, fecha_entrega, codigo_entrega')
       .eq('id', id)
-      .single();
+      .limit(1);
 
-    if (error || !orden) {
+    if (error || !ordenes || ordenes.length === 0) {
       return res.status(404).json({ error: 'Orden no encontrada' });
     }
-    // Si ya está pagado, no volver a consultar Stripe
-    if (orden.pagado && orden.fecha_entrega!=null && orden.codigo_entrega) {
-      return res.json({ pagado: true ,codigo_entrega:orden.codigo_entrega,fecha_entrega:orden.fecha_entrega});
+
+    const orden = ordenes[0]; // Accedemos al primer (y único) resultado
+
+    console.log("Stripe Session ID:", orden.stripe_session_id);
+
+    // Si ya está pagado y tiene datos de entrega
+    if (orden.pagado && orden.fecha_entrega != null && orden.codigo_entrega) {
+      return res.json({
+        pagado: true,
+        codigo_entrega: orden.codigo_entrega,
+        fecha_entrega: orden.fecha_entrega
+      });
     }
-    console.log("session:"+id);
-    console.log("session stripe:"+orden.stripe_session_id);
+
+    if (!orden.stripe_session_id) {
+      return res.status(400).json({ error: 'No se encontró session_id de Stripe' });
+    }
 
     // Paso 2: Verificar el pago en Stripe
     const session = await stripe.checkout.sessions.retrieve(orden.stripe_session_id);
@@ -216,21 +227,21 @@ app.post('/api/verificar-pago', async (req, res) => {
       // Paso 3: Actualizar la orden en Supabase
       const { error: updateError } = await supabase
         .from('ordenes')
-        .update({ pagado: true ,codigo_entrega: cod})
+        .update({ pagado: true, codigo_entrega: cod })
         .eq('id', id);
 
       if (updateError) {
-        console.error('Error actualizando Supabase:', updateError.message);
+        console.error('❌ Error actualizando Supabase:', updateError.message);
         return res.status(500).json({ error: 'Error actualizando orden como pagada' });
       }
 
-      return res.json({ pagado: true ,codigo_entrega:cod});
+      return res.json({ pagado: true, codigo_entrega: cod });
     } else {
       return res.json({ pagado: false });
     }
   } catch (err) {
-    console.error('Error al verificar el pago:', err.message);
-    res.status(500).json({ error: 'Error al verificar el pago' });
+    console.error('❌ Error al verificar el pago:', err.message);
+    return res.status(500).json({ error: 'Error al verificar el pago' });
   }
 });
 const generarCodigoEntrega = (length = 6) => {
