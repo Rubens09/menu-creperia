@@ -56,36 +56,41 @@ $(document).ready(function() {
             let itemsParaStripe = [];
             let ordenesParaGuardar = [];
             const ordenUUID = generateUUID(); // Generador de GUID
-    
+
             for (let id in orden_item) {
                 const subitems = Array.isArray(orden_subitem[id]) ? orden_subitem[id].join(',') : orden_subitem[id] || '';
                 const cantidad = parseInt(orden_subitem_cantidad[id]) || 1;
                 const complementosRaw = orden_subitem_complemento[id] || {};
-    
-                const complementosSeleccionados = Object.values(complementosRaw);
-    
-                let precioCrepa = calcularPrecioCrepa(orden_item[id], orden_subitem[id]);
-                let precioComplementos = calcularPrecioComplementos(complementosSeleccionados.flat());
-                let precioFinal = precioCrepa + precioComplementos;
-    
-                itemsParaStripe.push({
-                    id: ordenUUID,
-                    name: `${orden_item[id]} - ${subitems}`,
-                    quantity: cantidad,
-                    description: complementosSeleccionados.flat().length > 0
-                        ? `Complementos: ${complementosSeleccionados.flat().join(', ')}`
-                        : '',
-                    price: precioFinal
-                });
-    
-                ordenesParaGuardar.push({
-                    id: ordenUUID,
-                    crepa_tipo: orden_item[id],
-                    crepa_subtipo: subitems,
-                    complementos: complementosSeleccionados,
-                    cantidad,
-                    precio: precioFinal
-                });
+
+                const complementosPorUnidad = Object.values(complementosRaw); // Array de arrays (cada array por unidad)
+
+                for (let i = 0; i < cantidad; i++) {
+                    const complementosSeleccionados = complementosPorUnidad[i] || [];
+                    const complementosArray = Array.isArray(complementosSeleccionados) ? complementosSeleccionados : [complementosSeleccionados];
+
+                    const precioCrepa = calcularPrecioCrepa(orden_item[id], orden_subitem[id]);
+                    const precioComplementos = calcularPrecioComplementos(complementosSeleccionados);
+                    const precioFinal = precioCrepa + precioComplementos;
+
+                    itemsParaStripe.push({
+                        id: ordenUUID,
+                        name: `${orden_item[id]} - ${subitems}`,
+                        quantity: 1,
+                        description: complementosArray.length > 0
+                            ? `Complementos: ${complementosArray.join(', ')}`
+                            : '',
+                        price: precioFinal
+                    });
+
+                    ordenesParaGuardar.push({
+                        id: ordenUUID,
+                        crepa_tipo: orden_item[id],
+                        crepa_subtipo: subitems,
+                        complementos: complementosSeleccionados,
+                        cantidad: 1,
+                        precio: precioFinal
+                    });
+                }
             }
     
             // Crear sesión de Stripe
@@ -203,6 +208,7 @@ $(document).ready(function() {
         // Incrementar el contador hasta el final para mantener el índice sincronizado
         pagina_orden++;
         totalComplementos=0;
+        cont_complemento=1;
     });    
     $(document).on("change", ".form-check-input", function () {
         const precio = parseInt($(this).data("price")) || 0;
@@ -550,16 +556,31 @@ function calcularPrecioCrepa(ordenItem, ordenSubitem) {
     return precioBase;
 }
 // Función para calcular el precio de los complementos
-function calcularPrecioComplementos(complementosSeleccionados) {
+function calcularPrecioComplementos(complementosRaw) {
     let precios = JSON.parse(localStorage.getItem("element_item"));
     let precioComplementos = 0;
-    // Recorremos los complementos seleccionados
-    if (precios.Complemento) {
+
+    if (!complementosRaw) return 0;
+
+    let complementosSeleccionados = [];
+
+    if (typeof complementosRaw === 'string') {
+        complementosSeleccionados = [complementosRaw];
+    } else if (typeof complementosRaw === 'object') {
+        // Si es objeto, extraemos los valores y aplanamos el array
+        complementosSeleccionados = Object.values(complementosRaw).flat();
+    } else {
+        // Otro tipo de dato no esperado
+        return 0;
+    }
+
+    if (precios?.Complemento) {
         complementosSeleccionados.forEach(complemento => {
             if (precios.Complemento[complemento]) {
-                precioComplementos += precios.Complemento[complemento].costo;  // Sumamos el costo de cada complemento
+                precioComplementos += precios.Complemento[complemento].costo;
             }
         });
     }
+
     return precioComplementos;
 }

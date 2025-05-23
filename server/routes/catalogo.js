@@ -5,7 +5,6 @@ const supabase = require('../lib/supabase');
 // Endpoint para obtener el catálogo
 router.get('/catalogo', async (req, res) => {
   try {
-    console.log("Hola");
     const catalogo = {};
 
     // 1. Obtener Categorías
