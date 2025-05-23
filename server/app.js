@@ -271,8 +271,7 @@ app.post('/api/actualizar-hora-entrega', async (req, res) => {
       .from('ordenes')
       .update({ fecha_entrega: fechaEntrega })
       .eq('id', id)
-      .select('codigo_entrega, fecha_entrega')
-      .single();
+      .select('codigo_entrega, fecha_entrega');
 
     if (error) {
       console.error('Error actualizando fecha_entrega:', error.message);
