@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmación de Compra</title>
+    <!-- Vincula Bootstrap 4 para el diseño -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .btn-custom {
+            background-color: #28a745;
+            color: white;
+        }
+        .swal2-container.blur-background {
+            backdrop-filter: blur(6px);
+            background-color: rgba(0, 0, 0, 0.4); /* opcional para oscurecer un poco */
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div id="loader" style="display:none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.7); z-index: 9999; display:flex; justify-content:center; align-items:center;">
+        <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem;">
+          <span class="sr-only">Cargando...</span>
+        </div>
+    </div>      
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-md-6 offset-md-3">
+                <h2 class="text-center">¡Gracias por tu compra!</h2>
+                <p class="text-center">Tu compra ha sido procesada con éxito.</p>
+
+                <h4 class="mt-4">Selecciona tu hora de entrega</h4>
+                <p>Por favor, selecciona una hora entre las 6 PM y las 11 PM.</p>
+                
+                <form id="delivery-time-form">
+                    <div class="form-group">
+                        <label for="delivery-time">Hora de entrega</label>
+                        <input type="time" id="delivery-time" class="form-control" required min="18:00" max="23:00">
+                        <small class="form-text text-muted">Selecciona una hora dentro del rango de 6:00 PM a 11:00 PM.</small>
+                    </div>
+                    <button type="submit" class="btn btn-custom btn-block">Confirmar hora de entrega</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div id="mensaje" class="mt-4"></div>
+
+<!-- jQuery (inclúyelo solo UNA VEZ y en versión completa) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- Bootstrap JS (si usas funcionalidades de Bootstrap) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- SweetAlert2 (Toast) -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+  $(document).ready(function () {
+    const urlParams = new URLSearchParams(window.location.search);
+    const ordenId = urlParams.get('id'); // Obtener el ID desde la URL (por ejemplo: ?id=1234)
+
+    if (!ordenId) {
+      Swal.fire({
+        icon: 'error',
+        title: 'ID de orden no encontrado',
+        text: 'No se pudo continuar sin el ID.',
+      });
+      return;
+    }
+
+    function verificarPago() {
+        $('#loader').show();  // Mostrar loader al iniciar
+
+        $.ajax({
+            url: '/api/verificar-pago',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ id: ordenId }),
+            success: function (response) {
+            $('#loader').hide(); // Ocultar loader al terminar
+            if (response.pagado) {
+                if (response.fecha_entrega) {
+                Swal.fire({
+                    title: 'Gracias por tu compra',
+                    html: `Recuerda que debes recogerla el día <b>${response.fecha_entrega.replace("T"," ")}</b><br>Código de entrega: <b>${response.codigo_entrega}</b><br><br><b>Nota:</b> Guarda tu código, ya que te lo solicitaremos.`,
+                    icon: 'success',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: true,
+                    confirmButtonText: 'Inicio'
+                }).then(() => {
+                    window.location.href = '/';
+                });
+                } else {
+                setTimeout(() => {
+                    Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'info',
+                    title: 'Tu pago ha sido confirmado.',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true
+                    });
+                }, 3000);
+
+                $('#form-hora').show();
+                clearInterval(reintentoInterval);
+                }
+            } else {
+                mostrarModalEspera(ordenId);
+            }
+            },
+            error: function () {
+            $('#loader').hide();
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al verificar el pago',
+                text: 'Intenta más tarde.',
+            });
+            mostrarModalEspera(ordenId);
+            }
+        });
+        }
+
+    // Mostrar modal de espera mientras se verifica el pago
+    function mostrarModalEspera(ordenId) {
+      let tiempoRestante = 30;
+      Swal.fire({
+        title: 'Procesando tu pago...',
+        html: 'Esperando confirmación de pago.<br> Reintentando en <b><span id="temporizador">30</span></b> segundos.<br><br>Para aclaración comparte el siguiete texto: <b><br>'+ordenId.toUpperCase()+'</b>',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        customClass: {
+            container: 'blur-background'  // 👈 esta es la clase que agregamos
+        },
+        didOpen: () => {
+          const contador = setInterval(() => {
+            tiempoRestante--;
+            document.getElementById('temporizador').textContent = tiempoRestante;
+            if (tiempoRestante <= 0) {
+              clearInterval(contador);
+            }
+          }, 1000);
+        }
+      });
+    }
+
+    // Llamada inicial
+    verificarPago();
+
+    // Reintentar cada 30 segundos si no se ha confirmado el pago
+    const reintentoInterval = setInterval(verificarPago, 30000);
+
+    // Validación de hora de entrega
+    $('#delivery-time-form').on('submit', function (e) {
+        e.preventDefault();
+        const deliveryTime = $('#delivery-time').val();
+
+        if (!deliveryTime) {
+            Swal.fire({
+            icon: 'warning',
+            title: 'Hora no seleccionada',
+            text: 'Por favor, selecciona una hora.',
+            });
+            return;
+        }
+
+        const deliveryTimeObj = new Date(`1970-01-01T${deliveryTime}:00`);
+        const minTime = new Date('1970-01-01T18:00:00');
+        const maxTime = new Date('1970-01-01T23:00:00');
+
+        if (deliveryTimeObj >= minTime && deliveryTimeObj <= maxTime) {
+            // Enviar hora al backend
+            $.ajax({
+            url: '/api/actualizar-hora-entrega',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                id: ordenId,
+                hora: deliveryTime
+            }),
+            success: function (res) {
+                const fecha = new Date(res.fecha_entrega).toLocaleDateString('es-MX', {
+                timeZone: 'America/Mexico_City',
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+                });
+
+                Swal.fire({
+                icon: 'success',
+                title: '¡Hora confirmada!',
+                html: `Recoge tu pedido el <b>${fecha}</b> a las <b>${deliveryTime}</b>.<br><br>
+                        Código de entrega: <b>${res.codigo_entrega}</b>`,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                confirmButtonText: 'Inicio'
+                }).then(() => {
+                window.location.href = '/';
+                });
+            },
+            error: function () {
+                Swal.fire({
+                icon: 'error',
+                title: 'Error al guardar la hora',
+                text: 'Intenta más tarde.',
+                });
+            }
+            });
+        } else {
+            Swal.fire({
+            icon: 'error',
+            title: 'Hora inválida',
+            text: 'Por favor selecciona una hora entre las 6 PM y las 11 PM.',
+            });
+        }
+    });
+  });
+</script>
+</body>
+</html>
