@@ -3,6 +3,8 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');  // Necesario para manejar rutas
 require('dotenv').config();
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -19,7 +21,7 @@ const ordenesRouter = require('./routes/ordenes');
 // Middleware de CORS
 app.use(cors());
 app.use(express.json());  // Para manejar solicitudes JSON
-
+app.use(cookieParser());
 // Sirve archivos estáticos desde la carpeta 'public'
 app.use(express.static(path.join(__dirname, '../public')));  // <- Importante! Apunta a la carpeta 'public' correctamente.
 app.get('/success', (req, res) => {
@@ -27,6 +29,9 @@ app.get('/success', (req, res) => {
 });
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'login.html')); // Asegúrate de usar la ruta correcta
+});
+app.get('/pedidos', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'pedidos.html')); // Asegúrate de usar la ruta correcta
 });
 // Ruta para obtener los datos del catálogo desde Supabase
 app.get('/api/catalogo', async (req, res) => {
@@ -292,3 +297,52 @@ app.post('/api/actualizar-hora-entrega', async (req, res) => {
 app.get('/api/stripe-public-key', (req, res) => {
   res.json({ publicKey: process.env.STRIPE_PUBLIC_KEY });
 });
+//##################login
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+
+  if (
+    email === process.env.ADMIN_EMAIL &&
+    password === process.env.ADMIN_PASSWORD
+  ) {
+    const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '2h' });
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: false, // pon "true" en producción con HTTPS
+    });
+
+    return res.json({ success: true });
+  }
+
+  res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
+});
+
+// Middleware para proteger rutas
+function verificarAutenticacion(req, res, next) {
+  const token = req.cookies.token;
+
+  if (!token) {
+    return res.redirect('/');
+  }
+
+  try {
+    jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (err) {
+    return res.redirect('/');
+  }
+}
+
+// Ruta protegida
+app.get('/pedidos', verificarAutenticacion, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pedidos.html'));
+});
+
+// Logout
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ success: true });
+});
+//##################login
